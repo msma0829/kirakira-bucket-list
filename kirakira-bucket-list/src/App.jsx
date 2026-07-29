@@ -54,9 +54,9 @@ const buildInitialCategories = () => [
     emoji: "✈️",
     palette: PALETTE[0],
     items: [
-      { id: uid(), text: "京都の紅葉を見に行く", checked: true },
-      { id: uid(), text: "ニューヨークで自由の女神を見る", checked: false },
-      { id: uid(), text: "沖縄で青の洞窟シュノーケリング", checked: false },
+      { id: uid(), text: "京都の紅葉を見に行く（例）", checked: true },
+      { id: uid(), text: "ニューヨークで自由の女神を見る（例）", checked: false },
+      { id: uid(), text: "沖縄で青の洞窟シュノーケリング（例）", checked: false },
     ],
   },
   {
@@ -65,9 +65,9 @@ const buildInitialCategories = () => [
     emoji: "🎁",
     palette: PALETTE[1],
     items: [
-      { id: uid(), text: "新しいカメラ", checked: false },
-      { id: uid(), text: "North Faceのリュック", checked: true },
-      { id: uid(), text: "一眼レフ用の三脚", checked: false },
+      { id: uid(), text: "新しいカメラ（例）", checked: false },
+      { id: uid(), text: "North Faceのリュック（例）", checked: true },
+      { id: uid(), text: "一眼レフ用の三脚（例）", checked: false },
     ],
   },
 ];
@@ -380,107 +380,3 @@ export default function App() {
                     placeholder="新しい夢を追加..."
                     className="flex-1 text-sm bg-white/70 rounded-xl px-3 py-2 outline-none placeholder:text-gray-300 text-gray-600 focus:ring-2 focus:ring-white"
                   />
-                  <button onClick={() => addItem(cat.id)} className={`${p.chip} rounded-xl px-3 flex items-center justify-center hover:brightness-95 transition`} aria-label="追加">
-                    <Plus className={`w-4 h-4 ${p.text}`} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* カテゴリー追加 */}
-        <div className="mt-6">
-          {showAddCategory ? (
-            <div className="flex gap-2 bg-white/60 rounded-2xl p-2 border border-purple-100">
-              <input
-                autoFocus
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addCategory()}
-                placeholder="新しいカテゴリー名（例: 学びたいこと）"
-                className="flex-1 text-sm bg-transparent outline-none px-2 text-gray-600 placeholder:text-gray-300"
-              />
-              <button onClick={addCategory} className="bg-purple-200 text-purple-500 text-sm rounded-xl px-4 py-2 hover:brightness-95 transition">
-                追加
-              </button>
-              <button
-                onClick={() => {
-                  setShowAddCategory(false);
-                  setNewCategoryName("");
-                }}
-                className="text-gray-300 hover:text-gray-500 px-2 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowAddCategory(true)}
-              className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-purple-200 rounded-2xl py-3 text-purple-300 hover:bg-white/40 transition text-sm"
-            >
-              <Plus className="w-4 h-4" />
-              カテゴリーを追加
-            </button>
-          )}
-        </div>
-
-        <p className="text-center text-xs text-purple-200 mt-8">✨ このブラウザに自動で保存されます</p>
-      </div>
-
-      {/* 削除の取り消しトースト */}
-      {toast && (
-        <div className="fixed left-1/2 bottom-6 z-50 flex items-center gap-3 bg-white shadow-lg rounded-full pl-4 pr-2 py-2" style={{ transform: "translateX(-50%)" }}>
-          <span className="text-sm text-gray-600 truncate" style={{ maxWidth: "55vw" }}>{toast.message}</span>
-          <button onClick={toast.onUndo} className="flex items-center gap-1 bg-purple-100 text-purple-500 text-sm font-bold rounded-full px-3 py-1.5 hover:bg-purple-200 transition shrink-0">
-            <RotateCcw className="w-3.5 h-3.5" />
-            元に戻す
-          </button>
-          <button onClick={dismissToast} className="text-gray-300 hover:text-gray-500 pr-1 shrink-0" aria-label="閉じる">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* 端っこの小さなアーカイブ箱 */}
-      <div className="fixed bottom-4 left-4 z-50 flex flex-col items-start">
-        {trashOpen && (
-          <div className="mb-2 w-60 max-h-72 overflow-y-auto bg-white rounded-2xl shadow-lg border border-gray-100 p-2">
-            <p className="text-xs text-gray-400 px-2 pt-1 pb-2">アーカイブ</p>
-            {trash.length === 0 ? (
-              <p className="text-xs text-gray-300 px-2 pb-2">空っぽです</p>
-            ) : (
-              <div className="space-y-1">
-                {trash.map((entry) => (
-                  <div key={entry.id} className="flex items-center gap-2 bg-gray-50 rounded-xl px-2 py-1.5">
-                    <span className="text-xs shrink-0">{entry.type === "category" ? "📁" : "・"}</span>
-                    <span className="flex-1 text-xs text-gray-500 truncate">{entry.label}</span>
-                    <button onClick={() => restoreFromTrash(entry.id)} className="text-purple-400 hover:text-purple-600 shrink-0" aria-label="復元">
-                      <RotateCcw className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => permanentlyDelete(entry.id)} className="text-gray-300 hover:text-rose-400 shrink-0" aria-label="完全に削除">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        <button
-          onClick={() => setTrashOpen((v) => !v)}
-          className="relative w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center text-gray-400 hover:text-gray-600 transition"
-          aria-label="アーカイブを開く"
-        >
-          <Archive className="w-4 h-4" />
-          {trash.length > 0 && (
-            <span className="absolute -top-1 -right-1 bg-rose-300 text-white rounded-full text-[10px] leading-none w-4 h-4 flex items-center justify-center">
-              {trash.length > 9 ? "9+" : trash.length}
-            </span>
-          )}
-        </button>
-      </div>
-    </div>
-  );
-}
