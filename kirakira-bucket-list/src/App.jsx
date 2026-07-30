@@ -1,5 +1,7 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Star, Plus, X, Sparkles, Trash2, RotateCcw, Archive, ChevronDown } from "lucide-react";
+
+const STORAGE_KEY = "kirakira-bucket-list-v1";
 
 const PALETTE = [
   { name: "sky", bg: "bg-sky-100", border: "border-sky-200", text: "text-sky-500", fill: "bg-sky-300", chip: "bg-sky-200" },
@@ -39,10 +41,13 @@ const pickEmoji = (name) => {
   return rule ? rule.emoji : "🌟";
 };
 
-let nextId = 1000;
-const uid = () => nextId++;
+// ブラウザ標準のUUID生成（対応していない古い環境向けのフォールバック付き）
+const uid = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-const initialCategories = [
+const buildInitialCategories = () => [
   {
     id: uid(),
     name: "旅行",
@@ -65,8 +70,23 @@ const initialCategories = [
   },
 ];
 
-export default function BucketListApp() {
-  const [categories, setCategories] = useState(initialCategories);
+// 保存データにはpalette情報は含めず、名前から再度色を割り当てる
+const paletteForIndex = (i) => PALETTE[i % PALETTE.length];
+
+const loadCategories = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return buildInitialCategories();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return buildInitialCategories();
+    return parsed.map((c, i) => ({ ...c, palette: paletteForIndex(i) }));
+  } catch {
+    return buildInitialCategories();
+  }
+};
+
+export default function App() {
+  const [categories, setCategories] = useState(loadCategories);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [draftItems, setDraftItems] = useState({});
@@ -74,8 +94,14 @@ export default function BucketListApp() {
   const [expandedItems, setExpandedItems] = useState(new Set());
   const [toast, setToast] = useState(null); // { message, onUndo }
   const toastTimerRef = useRef(null);
-  const [trash, setTrash] = useState([]); // 削除済みアイテム/カテゴリーの保管場所
+  const [trash, setTrash] = useState([]); // 削除済みアイテム/カテゴリーの保管場所（アーカイブ）
   const [trashOpen, setTrashOpen] = useState(false);
+
+  // カテゴリーが変わるたびにブラウザに保存（paletteは除いて保存）
+  useEffect(() => {
+    const toSave = categories.map(({ palette, ...rest }) => rest);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  }, [categories]);
 
   const showToast = (message, onUndo) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -88,16 +114,12 @@ export default function BucketListApp() {
     setToast(null);
   };
 
-  const insertAt = (arr, index, value) => [
-    ...arr.slice(0, index),
-    value,
-    ...arr.slice(index),
-  ];
+  const insertAt = (arr, index, value) => [...arr.slice(0, index), value, ...arr.slice(index)];
 
   const addCategory = () => {
     const name = newCategoryName.trim();
     if (!name) return;
-    const palette = PALETTE[categories.length % PALETTE.length];
+    const palette = paletteForIndex(categories.length);
     setCategories([...categories, { id: uid(), name, emoji: pickEmoji(name), palette, items: [] }]);
     setNewCategoryName("");
     setShowAddCategory(false);
@@ -173,9 +195,7 @@ export default function BucketListApp() {
     if (index === -1) return;
     const removed = cat.items[index];
     setCategories(
-      categories.map((c) =>
-        c.id === catId ? { ...c, items: c.items.filter((it) => it.id !== itemId) } : c
-      )
+      categories.map((c) => (c.id === catId ? { ...c, items: c.items.filter((it) => it.id !== itemId) } : c))
     );
     const trashId = uid();
     setTrash((cur) => [
@@ -191,7 +211,7 @@ export default function BucketListApp() {
     });
   };
 
-  // ゴミ箱から復元する
+  // アーカイブから復元する
   const restoreFromTrash = (trashId) => {
     const entry = trash.find((t) => t.id === trashId);
     if (!entry) return;
@@ -201,12 +221,10 @@ export default function BucketListApp() {
       setCategories((cur) => {
         const catExists = cur.some((c) => c.id === entry.catId);
         if (catExists) {
-          return cur.map((c) =>
-            c.id === entry.catId ? { ...c, items: [...c.items, entry.item] } : c
-          );
+          return cur.map((c) => (c.id === entry.catId ? { ...c, items: [...c.items, entry.item] } : c));
         }
         // 元のカテゴリーがもう無い場合は、同じ名前で作り直す
-        const palette = PALETTE[cur.length % PALETTE.length];
+        const palette = paletteForIndex(cur.length);
         return [
           ...cur,
           { id: uid(), name: entry.catName, emoji: pickEmoji(entry.catName), palette, items: [entry.item] },
@@ -229,7 +247,6 @@ export default function BucketListApp() {
       }}
     >
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;800;900&family=Quicksand:wght@400;500;600;700&display=swap');
         @keyframes pop {
           0% { transform: scale(1); }
           40% { transform: scale(1.18); }
@@ -255,10 +272,6 @@ export default function BucketListApp() {
           50% { opacity: 1; transform: scale(1.15) rotate(15deg); }
         }
         .title-puku {
-          display: inline-block;
-          animation: puku 1.6s ease-in-out infinite;
-        }
-        .title-puku span {
           display: inline-block;
           animation: puku 1.6s ease-in-out infinite;
         }
@@ -291,35 +304,15 @@ export default function BucketListApp() {
       <div className="max-w-xl mx-auto px-5 py-10">
         {/* ヘッダー */}
         <div className="relative text-center mb-9">
-          {/* 散りばめた星たち(交互に瞬く) */}
-          <Sparkles
-            className="w-4 h-4 text-purple-300 title-twinkle absolute"
-            style={{ top: "-2px", left: "18%", animationDelay: "0s" }}
-          />
-          <Sparkles
-            className="w-3 h-3 text-pink-300 title-twinkle absolute"
-            style={{ top: "6px", right: "16%", animationDelay: "1.4s" }}
-          />
-          <Sparkles
-            className="w-3 h-3 text-amber-300 title-twinkle absolute"
-            style={{ top: "38%", left: "6%", animationDelay: "0.7s" }}
-          />
-          <Sparkles
-            className="w-4 h-4 text-purple-200 title-twinkle absolute"
-            style={{ top: "34%", right: "5%", animationDelay: "2.1s" }}
-          />
-          <Sparkles
-            className="w-3 h-3 text-pink-200 title-twinkle absolute"
-            style={{ bottom: "6px", left: "26%", animationDelay: "0s" }}
-          />
-          <Sparkles
-            className="w-3 h-3 text-purple-300 title-twinkle absolute"
-            style={{ bottom: "0px", right: "24%", animationDelay: "1.4s" }}
-          />
+          <Sparkles className="w-4 h-4 text-purple-300 title-twinkle absolute" style={{ top: "-2px", left: "18%", animationDelay: "0s" }} />
+          <Sparkles className="w-3 h-3 text-pink-300 title-twinkle absolute" style={{ top: "6px", right: "16%", animationDelay: "1.4s" }} />
+          <Sparkles className="w-3 h-3 text-amber-300 title-twinkle absolute" style={{ top: "38%", left: "6%", animationDelay: "0.7s" }} />
+          <Sparkles className="w-4 h-4 text-purple-200 title-twinkle absolute" style={{ top: "34%", right: "5%", animationDelay: "2.1s" }} />
+          <Sparkles className="w-3 h-3 text-pink-200 title-twinkle absolute" style={{ bottom: "6px", left: "26%", animationDelay: "0s" }} />
+          <Sparkles className="w-3 h-3 text-purple-300 title-twinkle absolute" style={{ bottom: "0px", right: "24%", animationDelay: "1.4s" }} />
 
           <div className="flex items-center justify-center gap-2 mb-2">
             <div className="relative inline-block pt-5 pl-3">
-              {/* きらきら雲バブル */}
               <div
                 className="cloud-badge absolute z-10 bg-white/90 text-purple-400 shadow-sm flex items-center justify-center"
                 style={{
@@ -334,26 +327,12 @@ export default function BucketListApp() {
               >
                 きらきら
               </div>
-              {/* 雲のしっぽ(小さい丸) */}
-              <div
-                className="absolute bg-white/90 rounded-full z-10"
-                style={{ width: "0.45rem", height: "0.45rem", top: "0.7rem", left: "-0.3rem" }}
-              />
-              <div
-                className="absolute bg-white/90 rounded-full z-10"
-                style={{ width: "0.25rem", height: "0.25rem", top: "1.15rem", left: "-0.55rem" }}
-              />
+              <div className="absolute bg-white/90 rounded-full z-10" style={{ width: "0.45rem", height: "0.45rem", top: "0.7rem", left: "-0.3rem" }} />
+              <div className="absolute bg-white/90 rounded-full z-10" style={{ width: "0.25rem", height: "0.25rem", top: "1.15rem", left: "-0.55rem" }} />
 
-              <h1
-                className="text-3xl"
-                style={{ fontFamily: "'M PLUS Rounded 1c', sans-serif", fontWeight: 900 }}
-              >
+              <h1 className="text-3xl" style={{ fontFamily: "'M PLUS Rounded 1c', sans-serif", fontWeight: 900 }}>
                 {"バケットリスト".split("").map((char, i) => (
-                  <span
-                    key={i}
-                    className="title-puku title-kira"
-                    style={{ animationDelay: `${i * 0.08}s` }}
-                  >
+                  <span key={i} className="title-puku title-kira" style={{ animationDelay: `${i * 0.08}s` }}>
                     {char}
                   </span>
                 ))}
@@ -374,85 +353,45 @@ export default function BucketListApp() {
           {categories.map((cat) => {
             const total = cat.items.length;
             const done = cat.items.filter((i) => i.checked).length;
-            const pct = total === 0 ? 0 : Math.round((done / total) * 100);
             const p = cat.palette;
 
             return (
-              <div
-                key={cat.id}
-                className={`rounded-3xl border ${p.border} ${p.bg} p-5 shadow-sm`}
-              >
-                {/* カテゴリーヘッダー */}
+              <div key={cat.id} className={`rounded-3xl border ${p.border} ${p.bg} p-5 shadow-sm`}>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <span className="text-xl">{cat.emoji}</span>
-                    <h2
-                      className={`text-lg ${p.text}`}
-                      style={{ fontFamily: "'Baloo 2', sans-serif", fontWeight: 700 }}
-                    >
+                    <h2 className={`text-lg ${p.text}`} style={{ fontFamily: "'M PLUS Rounded 1c', sans-serif", fontWeight: 700 }}>
                       {cat.name}
                     </h2>
                     <span className="text-xs text-gray-400">
                       {done}/{total}
                     </span>
                   </div>
-                  <button
-                    onClick={() => deleteCategory(cat.id)}
-                    className="text-gray-300 hover:text-gray-500 transition-colors"
-                    aria-label="カテゴリーを削除"
-                  >
+                  <button onClick={() => deleteCategory(cat.id)} className="text-gray-300 hover:text-gray-500 transition-colors" aria-label="カテゴリーを削除">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
 
-                {/* アイテムリスト */}
                 <div className="space-y-2 mb-3">
                   {cat.items.length === 0 && (
-                    <p className="text-sm text-gray-400 italic py-2">
-                      まだ何もありません。夢を追加してみましょう ✨
-                    </p>
+                    <p className="text-sm text-gray-400 italic py-2">まだ何もありません。夢を追加してみましょう ✨</p>
                   )}
                   {cat.items.map((item) => {
                     const isExpanded = expandedItems.has(item.id);
                     return (
                       <div key={item.id} className="group bg-white/70 rounded-2xl relative overflow-hidden">
                         <div className="flex items-center gap-2 px-3 py-2.5">
-                          <button
-                            onClick={() => toggleItem(cat.id, item.id)}
-                            className={`shrink-0 relative ${burstId === item.id ? "pop" : ""}`}
-                            aria-label="チェック"
-                          >
-                            <Star
-                              className={`w-5 h-5 ${
-                                item.checked ? `${p.text} fill-current` : "text-gray-300"
-                              }`}
-                            />
-                            {burstId === item.id && (
-                              <Sparkles className="w-4 h-4 text-amber-300 absolute -top-2 -right-2 sparkle-burst" />
-                            )}
+                          <button onClick={() => toggleItem(cat.id, item.id)} className={`shrink-0 relative ${burstId === item.id ? "pop" : ""}`} aria-label="チェック">
+                            <Star className={`w-5 h-5 ${item.checked ? `${p.text} fill-current` : "text-gray-300"}`} />
+                            {burstId === item.id && <Sparkles className="w-4 h-4 text-amber-300 absolute -top-2 -right-2 sparkle-burst" />}
                           </button>
-                          <button
-                            onClick={() => toggleExpand(item.id)}
-                            className="flex-1 flex items-center gap-1 text-left"
-                          >
-                            <span
-                              className={`flex-1 text-sm text-gray-600 ${
-                                item.checked ? "line-through text-gray-350 opacity-50" : ""
-                              }`}
-                            >
-                              {item.text}
-                            </span>
+                          <button onClick={() => toggleExpand(item.id)} className="flex-1 flex items-center gap-1 text-left">
+                            <span className={`flex-1 text-sm text-gray-600 ${item.checked ? "line-through text-gray-400 opacity-50" : ""}`}>{item.text}</span>
                             <ChevronDown
-                              className={`w-3.5 h-3.5 text-gray-300 shrink-0 transition-transform ${
-                                isExpanded ? "rotate-180" : ""
-                              }`}
+                              className={`w-3.5 h-3.5 text-gray-300 shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`}
                             />
                           </button>
-                          <button
-                            onClick={() => deleteItem(cat.id, item.id)}
-                            className="text-gray-300 hover:text-gray-500 transition-opacity shrink-0"
-                            aria-label="削除"
-                          >
+                          <button onClick={() => deleteItem(cat.id, item.id)} className="text-gray-300 hover:text-gray-500 transition-opacity shrink-0" aria-label="削除">
                             <X className="w-4 h-4" />
                           </button>
                         </div>
@@ -471,7 +410,6 @@ export default function BucketListApp() {
                   })}
                 </div>
 
-                {/* アイテム追加フォーム */}
                 <div className="flex gap-2">
                   <input
                     value={draftItems[cat.id] || ""}
@@ -480,11 +418,7 @@ export default function BucketListApp() {
                     placeholder="新しい夢を追加..."
                     className="flex-1 text-sm bg-white/70 rounded-xl px-3 py-2 outline-none placeholder:text-gray-300 text-gray-600 focus:ring-2 focus:ring-white"
                   />
-                  <button
-                    onClick={() => addItem(cat.id)}
-                    className={`${p.chip} rounded-xl px-3 flex items-center justify-center hover:brightness-95 transition`}
-                    aria-label="追加"
-                  >
+                  <button onClick={() => addItem(cat.id)} className={`${p.chip} rounded-xl px-3 flex items-center justify-center hover:brightness-95 transition`} aria-label="追加">
                     <Plus className={`w-4 h-4 ${p.text}`} />
                   </button>
                 </div>
@@ -505,10 +439,7 @@ export default function BucketListApp() {
                 placeholder="新しいカテゴリー名（例: 学びたいこと）"
                 className="flex-1 text-sm bg-transparent outline-none px-2 text-gray-600 placeholder:text-gray-300"
               />
-              <button
-                onClick={addCategory}
-                className="bg-purple-200 text-purple-500 text-sm rounded-xl px-4 py-2 hover:brightness-95 transition"
-              >
+              <button onClick={addCategory} className="bg-purple-200 text-purple-500 text-sm rounded-xl px-4 py-2 hover:brightness-95 transition">
                 追加
               </button>
               <button
@@ -532,30 +463,18 @@ export default function BucketListApp() {
           )}
         </div>
 
-        <p className="text-center text-xs text-purple-200 mt-8">
-          ※ このデモは画面を閉じるとリストがリセットされます
-        </p>
+        <p className="text-center text-xs text-purple-200 mt-8">✨ このブラウザに自動で保存されます</p>
       </div>
 
       {/* 削除の取り消しトースト */}
       {toast && (
-        <div
-          className="fixed left-1/2 bottom-6 z-50 flex items-center gap-3 bg-white shadow-lg rounded-full pl-4 pr-2 py-2"
-          style={{ transform: "translateX(-50%)" }}
-        >
-          <span className="text-sm text-gray-600 max-w-[55vw] truncate">{toast.message}</span>
-          <button
-            onClick={toast.onUndo}
-            className="flex items-center gap-1 bg-purple-100 text-purple-500 text-sm font-bold rounded-full px-3 py-1.5 hover:bg-purple-200 transition shrink-0"
-          >
+        <div className="fixed left-1/2 bottom-6 z-50 flex items-center gap-3 bg-white shadow-lg rounded-full pl-4 pr-2 py-2" style={{ transform: "translateX(-50%)" }}>
+          <span className="text-sm text-gray-600 truncate" style={{ maxWidth: "55vw" }}>{toast.message}</span>
+          <button onClick={toast.onUndo} className="flex items-center gap-1 bg-purple-100 text-purple-500 text-sm font-bold rounded-full px-3 py-1.5 hover:bg-purple-200 transition shrink-0">
             <RotateCcw className="w-3.5 h-3.5" />
             元に戻す
           </button>
-          <button
-            onClick={dismissToast}
-            className="text-gray-300 hover:text-gray-500 pr-1 shrink-0"
-            aria-label="閉じる"
-          >
+          <button onClick={dismissToast} className="text-gray-300 hover:text-gray-500 pr-1 shrink-0" aria-label="閉じる">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -571,24 +490,13 @@ export default function BucketListApp() {
             ) : (
               <div className="space-y-1">
                 {trash.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex items-center gap-2 bg-gray-50 rounded-xl px-2 py-1.5"
-                  >
+                  <div key={entry.id} className="flex items-center gap-2 bg-gray-50 rounded-xl px-2 py-1.5">
                     <span className="text-xs shrink-0">{entry.type === "category" ? "📁" : "・"}</span>
                     <span className="flex-1 text-xs text-gray-500 truncate">{entry.label}</span>
-                    <button
-                      onClick={() => restoreFromTrash(entry.id)}
-                      className="text-purple-400 hover:text-purple-600 shrink-0"
-                      aria-label="復元"
-                    >
+                    <button onClick={() => restoreFromTrash(entry.id)} className="text-purple-400 hover:text-purple-600 shrink-0" aria-label="復元">
                       <RotateCcw className="w-3.5 h-3.5" />
                     </button>
-                    <button
-                      onClick={() => permanentlyDelete(entry.id)}
-                      className="text-gray-300 hover:text-rose-400 shrink-0"
-                      aria-label="完全に削除"
-                    >
+                    <button onClick={() => permanentlyDelete(entry.id)} className="text-gray-300 hover:text-rose-400 shrink-0" aria-label="完全に削除">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
